@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/net/icmp"
@@ -17,19 +19,49 @@ type Response struct {
 	Address net.Addr
 }
 
+
+func PingScan(subnet string) {
+	// Get my IP that is on this subnet
+	// var onlineHosts []string
+	myIp, err := localIP()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ip := strings.TrimSuffix(strings.Split(subnet, "/")[0], "0")
+	mask, err := strconv.Atoi(strings.Split(subnet, "/")[1]) 
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if mask == 24 {
+		for i := 1; i < 254; i++ {
+			dst := ip + strconv.Itoa(i)
+			if icmpPing(myIp.String(), dst) {
+				fmt.Println(dst)
+				// onlineHosts = append(onlineHosts, dst)
+			}
+		}
+	}
+}
+
+
 func getResponse(ctx context.Context, responseChan chan Response, packet []byte, listener *icmp.PacketConn) {
 	n, peer, err := listener.ReadFrom(packet)
 	if err != nil {
 		listener.Close()
-		log.Fatal(err)
 	}
 	responseChan <- Response{Len: n, Address: peer}
 }
 
-func IcmpPing(dst string) {
+
+func icmpPing(src string, dst string) bool {
+	// sends an icmp echo request and listens for 1 second before timing out.
   // create context
+	var connected bool
+
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Second * 5)
+	ctx, cancel := context.WithTimeout(ctx, time.Millisecond * 300)
 	defer cancel()
 
 	// response chan
@@ -66,25 +98,26 @@ func IcmpPing(dst string) {
 
 	go getResponse(ctx, responseChan, rb, listener)
 
-	var response Response
 	select {
-	case response = <- responseChan:
-		fmt.Println("Response acquired")
+	case <- responseChan:
+		connected = true
 	case <- ctx.Done():
-		log.Printf("ping to %v timed out", dst)
+		connected = false
 	}
 
 	// run if there is a response length
-	if response.Len != 0 {
-		rm, err := icmp.ParseMessage(1, rb[:response.Len])
-		if err != nil {
-			log.Fatal(err)
-		}
-		switch rm.Type {
-		case ipv4.ICMPTypeEchoReply:
-			log.Printf("pong received from %v", response.Address)
-		default:
-			log.Printf("got %+v; want echo reply", rm)
-		}
-	}
+	// if response.Len != 0 {
+	// 	rm, err := icmp.ParseMessage(1, rb[:response.Len])
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// 	switch rm.Type {
+	// 	case ipv4.ICMPTypeEchoReply:
+	// 		log.Printf("pong received from %v", response.Address)
+	// 	default:
+	// 		log.Printf("got %+v; want echo reply", rm)
+	// 	}
+	// }
+
+	return connected;
 }

@@ -15,7 +15,7 @@ type Flags struct {
 var flags Flags
 
 func setFlags() {
-	flag.StringVar(&flags.Address, "A", "", "Attempt to contact an IP")
+	flag.StringVar(&flags.Address, "A", "", "specify subnet.")
 }
 
 
@@ -26,6 +26,6 @@ func main() {
 	flag.Parse()
 
 	if flags.Address != "" {
-		scanner.IcmpPing(flags.Address)
+		scanner.PingScan(flags.Address)
 	}
 }
