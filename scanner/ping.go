@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/icmp"
@@ -19,10 +20,16 @@ type Response struct {
 	Address net.Addr
 }
 
+type scanData struct {
+	sync.RWMutex
+	OnlineHosts []string
+	wg sync.WaitGroup
+}
 
-func PingScan(subnet string) {
+
+func PingScan(subnet string, start int, end int) {
 	// Get my IP that is on this subnet
-	// var onlineHosts []string
+	data := scanData{}
 	myIp, err := localIP()
 	if err != nil {
 		log.Fatal(err)
@@ -35,37 +42,56 @@ func PingScan(subnet string) {
 	}
 
 	if mask == 24 {
-		for i := 1; i < 254; i++ {
+		for i := start; i < end; i++ {
+			data.wg.Add(1)
 			dst := ip + strconv.Itoa(i)
-			if icmpPing(myIp.String(), dst) {
-				fmt.Println(dst)
-				// onlineHosts = append(onlineHosts, dst)
-			}
+			go icmpPing(myIp.String(), dst, &data)
 		}
+		data.wg.Wait()
+		fmt.Println(data.OnlineHosts)
 	}
 }
 
 
-func getResponse(ctx context.Context, responseChan chan Response, packet []byte, listener *icmp.PacketConn) {
-	n, peer, err := listener.ReadFrom(packet)
-	if err != nil {
-		listener.Close()
+func getResponse(ctx context.Context, responseChan chan bool, packet []byte, listener *icmp.PacketConn) {
+	n, _, _ := listener.ReadFrom(packet)
+
+
+	msg, _ := icmp.ParseMessage(1, packet[:n])
+
+	// return response if the length is greater than 0
+	if msg != nil {
+		body, err := msg.Body.Marshal(1)
+		if err != nil {
+			log.Println(err)
+		}
+
+		if strings.Contains(string(body), "HELLO-R-U-THERE") {
+			fmt.Println(string(body))
+			responseChan <- true
+		} else {
+			responseChan <- false
+		}
+	} else {
+		responseChan <- false
 	}
-	responseChan <- Response{Len: n, Address: peer}
 }
 
 
-func icmpPing(src string, dst string) bool {
+func icmpPing(src string, dst string, data *scanData) {
 	// sends an icmp echo request and listens for 1 second before timing out.
   // create context
-	var connected bool
+	data.Lock()
+	defer data.Unlock()
+	defer data.wg.Done()
+	connected := false
 
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Millisecond * 300)
+	ctx, cancel := context.WithTimeout(ctx, time.Millisecond * 100)
 	defer cancel()
 
 	// response chan
-	responseChan := make(chan Response)
+	responseChan := make(chan bool)
 
 	if dst == "" {
 		log.Fatal("Please specify an IP Address!")
@@ -90,34 +116,19 @@ func icmpPing(src string, dst string) bool {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = listener.WriteTo(encoded, &net.UDPAddr{IP: net.ParseIP(dst)}); 
-	if err != nil {
-		log.Fatal(err)
-	}
+	listener.WriteTo(encoded, &net.UDPAddr{IP: net.ParseIP(dst)}); 
 	rb := make([]byte, 1500)
 
 	go getResponse(ctx, responseChan, rb, listener)
 
 	select {
-	case <- responseChan:
-		connected = true
+	case connected = <- responseChan:
 	case <- ctx.Done():
-		connected = false
+		connected = false;
 	}
 
-	// run if there is a response length
-	// if response.Len != 0 {
-	// 	rm, err := icmp.ParseMessage(1, rb[:response.Len])
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	switch rm.Type {
-	// 	case ipv4.ICMPTypeEchoReply:
-	// 		log.Printf("pong received from %v", response.Address)
-	// 	default:
-	// 		log.Printf("got %+v; want echo reply", rm)
-	// 	}
-	// }
+	if connected {
+		data.OnlineHosts = append(data.OnlineHosts, dst)
+	}
 
-	return connected;
 }
