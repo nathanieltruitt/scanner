@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"runtime"
 	"context"
 	"fmt"
 	"log"
@@ -66,8 +67,8 @@ func getResponse(ctx context.Context, responseChan chan bool, packet []byte, lis
 			log.Println(err)
 		}
 
+		fmt.Println(string(body))
 		if strings.Contains(string(body), "HELLO-R-U-THERE") {
-			fmt.Println(string(body))
 			responseChan <- true
 		} else {
 			responseChan <- false
@@ -85,6 +86,13 @@ func icmpPing(src string, dst string, data *scanData) {
 	defer data.Unlock()
 	defer data.wg.Done()
 	connected := false
+	protocol := "udp4"
+
+	// retreive local IP
+	ip, err := localIP()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, time.Millisecond * 100)
@@ -97,8 +105,13 @@ func icmpPing(src string, dst string, data *scanData) {
 		log.Fatal("Please specify an IP Address!")
 	}
 
+	// check if the OS is windows
+	if runtime.GOOS == "windows" {
+		protocol = "ip4:icmp"
+	}
+
 	// TODO: needs to dynamically retreive the correct interface IP.
-	listener, err := icmp.ListenPacket("udp4", "10.0.0.208")
+	listener, err := icmp.ListenPacket(protocol, ip.String())
 	if err != nil {
 		log.Fatal(err)
 	}
