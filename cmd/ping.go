@@ -15,8 +15,14 @@ var PingCmd = &cobra.Command{
 	Run: ping,
 }
 
+func PingInit() {
+	PingCmd.Flags().StringVarP(&Address, "address", "a", "", "ping a single address")
+}
+
 func ping(cmd *cobra.Command, args []string) {
 	data := scanner.ScanData{}
-	scanner.Ping(Address, &data)
-	fmt.Println(data.OnlineHosts)
+	scanner.PingSingle(Address, &data)
+	if len(data.OnlineHosts) > 0 {
+		fmt.Println("ping successful: ", data.OnlineHosts[0])
+	}
 }

@@ -17,6 +17,7 @@ var rootCmd = &cobra.Command{
 var Address string
 var Start int
 var End int
+var Port string
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
@@ -26,10 +27,15 @@ func Execute() {
 }
 
 func init() {
-	ScanCmd.Flags().StringVarP(&Address, "address", "a", "", "supply an IP or a range of IPs for scanning")
-	ScanCmd.Flags().IntVarP(&Start, "start", "s", 1, "starting fourth octet for the scan")
-	ScanCmd.Flags().IntVarP(&End, "end", "e", 254, "ending fourth octet for the scan")
-	PingCmd.Flags().StringVarP(&Address, "address", "a", "", "ping a single address")
+	// initialize scan flags
+	ScanInit()
+	// initialize ping flags
+	PingInit()
+
+	// add commands
 	rootCmd.AddCommand(ScanCmd)
 	rootCmd.AddCommand(PingCmd)
+	
+	// adding a couple new lines for when the program runs
+	fmt.Print("\n\n")
 }
