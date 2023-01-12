@@ -19,6 +19,7 @@ func PingInit() {
 	PingCmd.Flags().StringVarP(&Address, "address", "a", "", "ping a single address")
 }
 
+// * Can currently only ping one address at a time.
 func ping(cmd *cobra.Command, args []string) {
 	data := scanner.ScanData{}
 	scanner.PingSingle(Address, &data)
